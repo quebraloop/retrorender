@@ -27,13 +27,28 @@ unsigned char get_blue_ch(uint32_t color)
 	return (color >> 8) & 0xFF;
 }
 
-void cb(int x, int y, void *ctx)
+void cb(int x, int y, int u0, int u1, int u2, int det, void *ctx)
 {
 	uintptr_t *ptr = (uintptr_t *)ctx;
 	Canvas *canvas = (Canvas *)ptr[0];
-	uint32_t color = *((uint32_t *)ptr[1]);
+	uint32_t *color_gradient = ((uint32_t *)ptr[1]);
+
+	float alpha = (float)u0 / (float)det;
+	float beta = (float)u1 / (float)det;
+	float gamma = (float)u2 / (float)det;
+
+	unsigned char r = get_red_ch(color_gradient[0]) * alpha + get_red_ch(color_gradient[1]) * beta + get_red_ch(color_gradient[2]) * gamma;
+	unsigned char g = get_green_ch(color_gradient[0]) * alpha + get_green_ch(color_gradient[1]) * beta + get_green_ch(color_gradient[2]) * gamma;
+	unsigned char b = get_blue_ch(color_gradient[0]) * alpha + get_blue_ch(color_gradient[1]) * beta + get_blue_ch(color_gradient[2]) * gamma;
+
+	uint32_t color = make_rgbx(r, g, b);
 
 	canvas_set_pixel(canvas, x, y, color);
+}
+
+uint32_t rand_color()
+{
+	return make_rgbx(rand() % 256, rand() % 256, rand() % 256);
 }
 
 void fetcher(
@@ -63,28 +78,21 @@ int main(void)
 
 	srand((unsigned int)(uintptr_t)pixels);
 
-	for (int i = 0; i < (1 << 16); i++) {
-		int x0 = rand() % width;
-		int y0 = rand() % height;
+	int x0 = 0.50f * width, y0 = 0.20f * height;
+	int x1 = 0.25f * width, y1 = 0.80f * height;
+	int x2 = 0.75f * width, y2 = 0.80f * height;
 
-		int x1 = rand() % width;
-		int y1 = rand() % height;
+	uint32_t color_gradient[] = { rand_color(), rand_color(), rand_color() };
 
-		unsigned char r = rand() % 256;
-		unsigned char g = rand() % 256;
-		unsigned char b = rand() % 256;
+	uintptr_t ctx[] = { (uintptr_t)&canvas, (uintptr_t)color_gradient };
 
-		uint32_t color = make_rgbx(r, g, b);
-	
-		uintptr_t ctx[] = { (uintptr_t)&canvas, (uintptr_t)&color };
-
-		raster_line(
-			x0, y0,
-			x1, y1,
-			ctx,
-			cb
-			);
-	}
+	raster_triangle(
+		x0, y0,
+		x1, y1,
+		x2, y2,
+		ctx,
+		cb
+		);
 
 	ppm_out(stdout, width, height, &canvas, fetcher);
 
